@@ -1,0 +1,11 @@
+# PiMed reverse proxy. Everything (SPA + /api) is served by the pimed container;
+# Caddy terminates TLS and forwards the real client IP in X-Forwarded-For.
+#
+# PIMED_SITE (from .env) decides the mode:
+#   :80                         → plain HTTP on any address, for local/LAN testing (default)
+#   pimed.your-tailnet.ts.net   → automatic HTTPS with a Tailscale certificate
+#                                 (needs docker-compose.tailscale.yml)
+{$PIMED_SITE::80} {
+	encode zstd gzip
+	reverse_proxy pimed:8080
+}

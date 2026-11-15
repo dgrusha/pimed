@@ -50,7 +50,9 @@ func TestLoginLimiter(t *testing.T) {
 }
 
 func TestLoginLimiterInFlight(t *testing.T) {
-	l := NewLoginLimiter(3, time.Minute, 100, nil)
+	// Frozen clock: the retry assertion below compares exact durations.
+	now := time.Unix(1_700_000_000, 0)
+	l := NewLoginLimiter(3, time.Minute, 100, func() time.Time { return now })
 	var held []*Attempt
 	for range 3 {
 		a, _, ok := l.Acquire("k")

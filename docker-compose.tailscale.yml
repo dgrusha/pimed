@@ -1,0 +1,8 @@
+# Add-on for the Raspberry Pi: lets Caddy obtain a real HTTPS certificate for the
+# Pi's Tailscale name (*.ts.net) from the tailscaled running on the host.
+#   docker compose -f docker-compose.yml -f docker-compose.tailscale.yml up -d --build
+# Requires Tailscale on the host with HTTPS certificates enabled for the tailnet.
+services:
+  caddy:
+    volumes:
+      - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock

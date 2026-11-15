@@ -1,0 +1,21 @@
+# Keep the build context small and free of local state/secrets.
+.git
+.gitignore
+.claude
+PLAN.md
+docs
+**/node_modules
+frontend/.svelte-kit
+frontend/build
+backend/web/dist
+backend/tmp
+backend/bin
+**/tmp
+**/*.db
+**/*.db-*
+**/*.log
+**/*.exe
+.env
+.env.*
+docker-compose*.yml
+Caddyfile
