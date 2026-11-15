@@ -1,0 +1,14 @@
+# Caddy config for a PiMed binary install on the Pi. Copy to /etc/caddy/Caddyfile
+# and replace the two placeholders, then: sudo systemctl reload caddy
+#
+# Caddy gets the HTTPS certificate for your *.ts.net name from Tailscale. Allow the
+# caddy user to request it once:
+#   echo 'TS_PERMIT_CERT_UID=caddy' | sudo tee -a /etc/default/tailscaled
+#   sudo systemctl restart tailscaled
+
+pimed.your-tailnet.ts.net {
+	# Listen only on the Pi's Tailscale IP (`tailscale ip -4`), not on the LAN.
+	bind 100.x.y.z
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+}
