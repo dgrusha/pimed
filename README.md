@@ -10,6 +10,133 @@ binary, fronted by Caddy.
 | `frontend/` | SvelteKit SPA (builds into `backend/web/dist`, embedded into the binary) |
 | `docs/api.md` | HTTP API contract and configuration reference |
 | `Dockerfile`, `docker-compose*.yml`, `Caddyfile` | Docker setup (below) |
+| `install.sh` | One-command installer / upgrader for the Pi (shipped in each release) |
+| `deploy/` | systemd unit, env file and Caddyfile for a binary install (shipped in each release) |
+| `.github/workflows/` | CI on pull requests and the release pipeline |
+
+## Install on a Raspberry Pi (no Docker)
+
+Every release on the [Releases page](https://github.com/dgrusha/pimed/releases) contains:
+
+| File | For |
+|---|---|
+| `install.sh` | The automatic installer (below) |
+| `pimed_linux_arm64.tar.gz` | Raspberry Pi 5 / 4 (64-bit Raspberry Pi OS) |
+| `pimed_linux_amd64.tar.gz` | Regular 64-bit x86 Linux PCs/servers |
+| `checksums.txt` | SHA-256 checksums of both archives |
+
+Each archive holds a single static `pimed` binary (frontend included — nothing else to install)
+plus `deploy/` with a systemd unit, an env file and a Caddyfile.
+
+### Automatic install (recommended)
+
+First install Tailscale on the Pi and log in (`curl -fsSL https://tailscale.com/install.sh | sh`,
+then `sudo tailscale up`), and enable **MagicDNS** and **HTTPS certificates** in the Tailscale
+admin console. Then:
+
+```sh
+curl -fsSL https://github.com/dgrusha/pimed/releases/latest/download/install.sh | sudo bash
+```
+
+When it finishes it prints the address to open — `https://<pi-name>.<tailnet>.ts.net` — where
+you create the first (admin) account.
+
+What the installer does:
+
+1. detects the CPU (arm64/amd64), downloads the matching release archive and **verifies its
+   SHA-256 checksum**;
+2. creates the `pimed` system user, installs the binary to `/usr/local/bin/pimed`, writes
+   `/etc/pimed/pimed.env` (first install only), creates the data directory (`/data`) and the
+   database directory (`/var/lib/pimed`);
+3. installs the hardened systemd service, starts it and waits until `/api/health` answers;
+4. if Tailscale is running: installs Caddy (apt), allows it to fetch the `*.ts.net` certificate
+   (`TS_PERMIT_CERT_UID=caddy`), writes `/etc/caddy/Caddyfile` bound to the Pi's Tailscale IP only
+   (an existing Caddyfile is backed up first), and makes Caddy start after Tailscale.
+
+Options — pass them after `sudo bash -s --`:
+
+```sh
+curl -fsSL https://github.com/dgrusha/pimed/releases/latest/download/install.sh \
+  | sudo bash -s -- --version v0.1.0 --data-dir /mnt/pimed
+```
+
+| Option | Meaning |
+|---|---|
+| `--version vX.Y.Z` | Install a specific release instead of the latest |
+| `--data-dir PATH` | Files/media root on first install (default `/data`), e.g. an external disk |
+| `--no-caddy` | Only install the PiMed service; set up HTTPS yourself |
+| `--archive FILE` | Install from a downloaded `pimed_linux_<arch>.tar.gz` (offline) |
+| `--uninstall` | Remove the service and binary — keeps data, database and settings |
+
+**Upgrading:** run the same command again. The binary and service are replaced and restarted;
+`/etc/pimed/pimed.env`, the database and your files are never overwritten.
+
+Prefer to read scripts before running them as root (a good habit)? Download it first:
+`curl -fsSLO https://github.com/dgrusha/pimed/releases/latest/download/install.sh`, review it,
+then `sudo bash install.sh`.
+
+### Manual install (optional)
+
+The same steps by hand, if you'd rather not use the installer.
+
+#### 1. Download and verify
+
+On the Pi (`uname -m` should print `aarch64`):
+
+```sh
+cd /tmp
+# Latest release:
+curl -fLO https://github.com/dgrusha/pimed/releases/latest/download/pimed_linux_arm64.tar.gz
+curl -fLO https://github.com/dgrusha/pimed/releases/latest/download/checksums.txt
+# …or a specific version: replace "latest/download" with "download/v0.1.0".
+
+sha256sum --ignore-missing -c checksums.txt     # must print: pimed_linux_arm64.tar.gz: OK
+tar xzf pimed_linux_arm64.tar.gz
+cd pimed_linux_arm64
+./pimed --version
+```
+
+#### 2. Install as a service
+
+```sh
+sudo install -m 0755 pimed /usr/local/bin/pimed
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin pimed
+sudo install -d -o pimed -g pimed -m 0750 /data          # files/media root
+sudo install -D -m 0640 -g pimed deploy/pimed.env /etc/pimed/pimed.env
+sudo install -m 0644 deploy/pimed.service /etc/systemd/system/pimed.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now pimed
+systemctl status pimed            # logs: journalctl -u pimed -f
+```
+
+The backend now listens on `127.0.0.1:8080` only. Settings live in `/etc/pimed/pimed.env`
+(restart with `sudo systemctl restart pimed` after changes); the database is in `/var/lib/pimed/`.
+
+#### 3. HTTPS over Tailscale with Caddy
+
+```sh
+sudo apt install caddy
+echo 'TS_PERMIT_CERT_UID=caddy' | sudo tee -a /etc/default/tailscaled   # lets Caddy fetch the *.ts.net cert
+sudo systemctl restart tailscaled
+sudo install -m 0644 deploy/Caddyfile /etc/caddy/Caddyfile
+sudo nano /etc/caddy/Caddyfile    # set your *.ts.net name and the Pi's IP from `tailscale ip -4`
+sudo systemctl reload caddy
+```
+
+Open `https://<pi-name>.<tailnet>.ts.net` from a device on your tailnet and create the first
+(admin) account. MagicDNS and HTTPS certificates must be enabled in the Tailscale admin console.
+
+#### Updating a manual install
+
+Download the new archive as in step 1, then:
+
+```sh
+sudo install -m 0755 pimed /usr/local/bin/pimed && sudo systemctl restart pimed
+```
+
+Your data and settings are untouched. Check `deploy/` in the new archive for changes to the unit
+or env file. To move files to an external disk, point `PIMED_DATA_DIR` at the mount, `chown` it
+to `pimed`, and add the path to `ReadWritePaths=` in the unit.
 
 ## Running with Docker
 
@@ -141,6 +268,46 @@ This runs, in parallel:
 The command fails if any step fails; add `--progress=plain` to see the full output.
 `--output type=cacheonly` keeps the run from leaving an image behind. Unchanged steps are cached,
 so add `--no-cache` to force everything to rerun.
+
+## Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on **every pull request** and on
+pushes to `main`:
+
+| Job | Checks |
+|---|---|
+| Frontend | `npm ci`, `svelte-check`, prettier, production build |
+| Backend | `gofmt`, `go vet`, `go test -race` against the built frontend, arm64 cross-compile |
+| Installer | `shellcheck install.sh` |
+| Docker | builds the runtime image and smoke-tests it (`/api/health`, setup status, SPA) |
+
+To block merging failing PRs: **Settings → Branches → Add branch ruleset** for `main` →
+*Require status checks to pass* → select the four CI jobs.
+
+## Making a release
+
+Releases are built by [`.github/workflows/release.yml`](.github/workflows/release.yml) when a
+version tag is pushed:
+
+```sh
+git checkout main && git pull
+git tag v0.1.0              # semantic version; v0.2.0-rc.1 style tags become pre-releases
+git push origin v0.1.0
+```
+
+The workflow then:
+
+1. runs the full CI suite (nothing is released if tests fail);
+2. builds the frontend once and cross-compiles static binaries for `linux/arm64` and
+   `linux/amd64`, stamping the version (`pimed --version`);
+3. packs each with `deploy/` and this README into `pimed_linux_<arch>.tar.gz`, writes
+   `checksums.txt`;
+4. creates the GitHub Release with auto-generated notes (from merged PRs/commits) and uploads the
+   archives, `checksums.txt` and `install.sh`.
+
+Watch it under the repository's **Actions** tab; the result appears under **Releases**. To redo a
+broken release, delete the release and tag on GitHub (`git push --delete origin v0.1.0`), fix,
+and tag again.
 
 ## Development without Docker
 

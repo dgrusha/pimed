@@ -1,0 +1,36 @@
+# systemd unit for a PiMed binary install (see README → "Install from a GitHub release").
+# Copy to /etc/systemd/system/pimed.service, then: sudo systemctl enable --now pimed
+[Unit]
+Description=PiMed private media server
+Documentation=https://github.com/dgrusha/pimed
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pimed
+Group=pimed
+EnvironmentFile=/etc/pimed/pimed.env
+ExecStart=/usr/local/bin/pimed
+Restart=on-failure
+RestartSec=5
+
+# Creates /var/lib/pimed (the default PIMED_DB_PATH dir) owned by the pimed user.
+StateDirectory=pimed
+StateDirectoryMode=0750
+
+# Hardening. If you move PIMED_DATA_DIR (e.g. to an external disk), add it here.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=-/data
+
+[Install]
+WantedBy=multi-user.target

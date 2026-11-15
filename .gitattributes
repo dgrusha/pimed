@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings to run on Linux, even when edited on Windows.
+*.sh text eol=lf
+Caddyfile text eol=lf
+deploy/* text eol=lf

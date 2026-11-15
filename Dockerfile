@@ -23,8 +23,9 @@ COPY backend/ ./
 COPY --from=frontend /src/backend/web/dist ./web/dist
 ARG TARGETOS=linux
 ARG TARGETARCH
+ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s -w" -o /out/pimed ./cmd/pimed
+    go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o /out/pimed ./cmd/pimed
 # Writable dirs for the volumes, owned by the distroless "nonroot" user (65532).
 RUN mkdir -p /out/data /out/db
 

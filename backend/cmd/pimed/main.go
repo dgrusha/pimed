@@ -27,7 +27,15 @@ import (
 
 const sessionCleanupInterval = time.Hour
 
+// version is set at build time by release builds:
+// go build -ldflags "-X main.version=v1.2.3" ./cmd/pimed
+var version = "dev"
+
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-version") {
+		fmt.Println("pimed", version)
+		return
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "pimed:", err)
 		os.Exit(1)
@@ -85,7 +93,7 @@ func run() error {
 	defer stop()
 	wg.Go(func() { cleanupSessions(ctx, svc, log) })
 
-	log.Info("starting pimed",
+	log.Info("starting pimed", "version", version,
 		"addr", cfg.Addr, "dataDir", cfg.DataDir, "dbPath", cfg.DBPath,
 		"cookieSecure", cfg.CookieSecure, "sessionTTL", cfg.SessionTTL,
 		"trustedProxies", cfg.TrustedProxies)
